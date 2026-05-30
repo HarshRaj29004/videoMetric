@@ -21,19 +21,15 @@ export function getHealth() {
   return request('/health');
 }
 
-export function listDocuments() {
-  return request('/documents');
-}
-
-export function createDocument(input) {
-  return request('/documents', {
+export function getMediaMetadata(input) {
+  return request('/scraper', {
     method: 'POST',
     body: JSON.stringify(input),
   });
 }
 
-export function askQuestion(input) {
-  return request('/ask', {
+export function getTranscript(input) {
+  return request('/scraper/transcript', {
     method: 'POST',
     body: JSON.stringify(input),
   });

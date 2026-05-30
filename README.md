@@ -26,6 +26,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - `POST /ask` - ask a question against the basic RAG pipeline
 - `POST /documents` - add documents to the in-memory knowledge base
 - `GET /documents` - list loaded documents
+- `POST /scraper` - extract media metadata from YouTube or Instagram
+- `POST /transcript` - extract YouTube captions or transcribe Instagram audio
 
 ## Frontend
 

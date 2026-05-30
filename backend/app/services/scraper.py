@@ -34,6 +34,7 @@ def extract_metadata(url: ScrapeRequest, cookiefile: Optional[str] = None) -> Di
         "like_count": info.get("like_count"),
         "comment_count": info.get("comment_count"),
         "thumbnail": info.get("thumbnail"),
+        "url": info.get("webpage_url"),
         "webpage_url": info.get("webpage_url"),
         "extractor": info.get("extractor"),
     }

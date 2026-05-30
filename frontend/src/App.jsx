@@ -1,38 +1,211 @@
 import { useEffect, useState } from 'react';
-import { askQuestion, createDocument, listDocuments } from './api';
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { getHealth, getMediaMetadata, getTranscript } from './api';
 
-const initialDocument = {
-  title: '',
-  content: '',
-};
+const DEFAULT_YOUTUBE_URL = 'https://www.youtube.com/watch?v=XuIswf2NauQ';
+
+function Layout({ children, subtitle }) {
+  const location = useLocation();
+
+  return (
+    <main className="shell">
+      <header className="hero">
+        <div>
+          <p className="eyebrow">videoMetric router demo</p>
+          <h1>Route-first UI for media metadata and transcripts.</h1>
+          <p className="hero-copy">
+            Use the navigation to switch between scraping media details and extracting transcripts.
+            The interface talks directly to the FastAPI routers.
+          </p>
+        </div>
+        <div className="hero-panel">
+          <div>
+            <span>Backend</span>
+            <strong>FastAPI routers</strong>
+          </div>
+          <div>
+            <span>Current route</span>
+            <strong>{location.pathname}</strong>
+          </div>
+          <div>
+            <span>Focus</span>
+            <strong>{subtitle}</strong>
+          </div>
+        </div>
+      </header>
+
+      <nav className="top-nav">
+        <NavLink to="/" end>
+          Home
+        </NavLink>
+        <NavLink to="/metadata">Metadata</NavLink>
+        <NavLink to="/transcript">Transcript</NavLink>
+      </nav>
+
+      {children}
+    </main>
+  );
+}
+
+function HomePage({ health }) {
+  const cards = [
+    {
+      title: 'Metadata',
+      copy: 'Inspect media info from the /scraper router.',
+      to: '/metadata',
+    },
+    {
+      title: 'Transcript',
+      copy: 'Pull YouTube captions or Instagram Whisper output from /scraper/transcript.',
+      to: '/transcript',
+    },
+  ];
+
+  return (
+    <section className="grid single-grid">
+      <article className="card">
+        <div className="card-header">
+          <h2>Backend status</h2>
+          <p>{health ? `Connected: ${health.status}` : 'Checking backend...'}</p>
+        </div>
+        <div className="stack">
+          {cards.map((card) => (
+            <NavLink key={card.title} to={card.to} className="route-card">
+              <strong>{card.title}</strong>
+              <span>{card.copy}</span>
+            </NavLink>
+          ))}
+        </div>
+      </article>
+    </section>
+  );
+}
+
+function MediaForm({
+  title,
+  description,
+  buttonLabel,
+  onSubmit,
+  defaultUrl,
+  resultRenderer,
+}) {
+  const [url, setUrl] = useState(defaultUrl);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await onSubmit({ url: url.trim() });
+      setResult(response);
+    } catch (submissionError) {
+      setError(submissionError instanceof Error ? submissionError.message : 'Request failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section className="grid">
+      <article className="card">
+        <div className="card-header">
+          <h2>{title}</h2>
+          <p>{description}</p>
+        </div>
+        <form onSubmit={handleSubmit} className="form">
+          <label>
+            Media URL
+            <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={defaultUrl} />
+          </label>
+          <button type="submit" disabled={loading}>
+            {loading ? 'Working...' : buttonLabel}
+          </button>
+        </form>
+        {error ? <div className="alert error">{error}</div> : null}
+      </article>
+
+      <article className="card results">
+        <div className="card-header">
+          <h2>Result</h2>
+          <p>Response from the backend route appears below.</p>
+        </div>
+        {result ? resultRenderer(result) : <p className="placeholder">Submit a URL to see the response.</p>}
+      </article>
+    </section>
+  );
+}
+
+function MetadataPage() {
+  return (
+    <Layout subtitle="Media metadata">
+      <MediaForm
+        title="Scrape metadata"
+        description="Calls POST /scraper and returns title, duration, uploader, and related media details."
+        buttonLabel="Fetch metadata"
+        defaultUrl={DEFAULT_YOUTUBE_URL}
+        onSubmit={getMediaMetadata}
+        resultRenderer={(result) => (
+          <div className="response">
+            <p className="answer">{result.title || 'No title returned.'}</p>
+            <div className="context-block">
+              <h3>Key fields</h3>
+              <pre>{JSON.stringify(result, null, 2)}</pre>
+            </div>
+          </div>
+        )}
+      />
+    </Layout>
+  );
+}
+
+function TranscriptPage() {
+  return (
+    <Layout subtitle="Transcript extraction">
+      <MediaForm
+        title="Extract transcript"
+        description="Calls POST /scraper/transcript. YouTube uses captions; Instagram downloads audio and runs Whisper."
+        buttonLabel="Get transcript"
+        defaultUrl={DEFAULT_YOUTUBE_URL}
+        onSubmit={({ url }) => getTranscript({ url })}
+        resultRenderer={(result) => (
+          <div className="response">
+            <p className="answer">{result.method} · {result.source}</p>
+            <div className="context-block">
+              <h3>Transcript</h3>
+              <pre>{result.transcript || 'No transcript returned.'}</pre>
+            </div>
+            {result.metadata ? (
+              <div className="sources-block">
+                <h3>Metadata</h3>
+                <pre>{JSON.stringify(result.metadata, null, 2)}</pre>
+              </div>
+            ) : null}
+          </div>
+        )}
+      />
+    </Layout>
+  );
+}
 
 export default function App() {
-  const [documents, setDocuments] = useState([]);
-  const [docForm, setDocForm] = useState(initialDocument);
-  const [question, setQuestion] = useState('What does the knowledge base contain?');
-  const [answer, setAnswer] = useState(null);
-  const [loadingDocs, setLoadingDocs] = useState(true);
-  const [loadingAnswer, setLoadingAnswer] = useState(false);
-  const [status, setStatus] = useState('');
-  const [error, setError] = useState('');
+  const [health, setHealth] = useState(null);
 
   useEffect(() => {
     let active = true;
 
-    listDocuments()
-      .then((items) => {
+    getHealth()
+      .then((status) => {
         if (active) {
-          setDocuments(items);
+          setHealth(status);
         }
       })
-      .catch((err) => {
+      .catch(() => {
         if (active) {
-          setError(err instanceof Error ? err.message : 'Failed to load documents');
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setLoadingDocs(false);
+          setHealth(null);
         }
       });
 
@@ -41,168 +214,19 @@ export default function App() {
     };
   }, []);
 
-  async function handleAddDocument(event) {
-    event.preventDefault();
-    setError('');
-    setStatus('');
-
-    if (!docForm.title.trim() || !docForm.content.trim()) {
-      setError('Document title and content are required.');
-      return;
-    }
-
-    try {
-      const created = await createDocument({
-        title: docForm.title.trim(),
-        content: docForm.content.trim(),
-      });
-      setDocuments((current) => [created, ...current]);
-      setDocForm(initialDocument);
-      setStatus('Document added to the knowledge base.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add document');
-    }
-  }
-
-  async function handleAsk(event) {
-    event.preventDefault();
-    setError('');
-    setLoadingAnswer(true);
-
-    try {
-      const response = await askQuestion({ question: question.trim(), top_k: 3 });
-      setAnswer(response);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to ask question');
-    } finally {
-      setLoadingAnswer(false);
-    }
-  }
-
   return (
-    <main className="shell">
-      <section className="hero">
-        <div>
-          <p className="eyebrow">videoMetric starter</p>
-          <h1>Basic RAG stack with a polished local workflow.</h1>
-          <p className="hero-copy">
-            Add documents, query them from the React UI, and route retrieval through the FastAPI backend.
-            The backend falls back gracefully if no LLM key is configured.
-          </p>
-        </div>
-        <div className="hero-panel">
-          <div>
-            <span>Frontend</span>
-            <strong>React + Vite</strong>
-          </div>
-          <div>
-            <span>Backend</span>
-            <strong>FastAPI + RAG</strong>
-          </div>
-          <div>
-            <span>Status</span>
-            <strong>{loadingDocs ? 'Loading knowledge base...' : `${documents.length} docs ready`}</strong>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid">
-        <article className="card">
-          <div className="card-header">
-            <h2>Add document</h2>
-            <p>Seed the in-memory knowledge base with content for retrieval.</p>
-          </div>
-          <form onSubmit={handleAddDocument} className="form">
-            <label>
-              Title
-              <input
-                value={docForm.title}
-                onChange={(event) => setDocForm((current) => ({ ...current, title: event.target.value }))}
-                placeholder="Example: Product FAQ"
-              />
-            </label>
-            <label>
-              Content
-              <textarea
-                value={docForm.content}
-                onChange={(event) => setDocForm((current) => ({ ...current, content: event.target.value }))}
-                placeholder="Paste a short note, policy, or knowledge article here."
-                rows={6}
-              />
-            </label>
-            <button type="submit">Add to knowledge base</button>
-          </form>
-        </article>
-
-        <article className="card">
-          <div className="card-header">
-            <h2>Ask a question</h2>
-            <p>The backend will retrieve the most relevant documents and generate a grounded answer.</p>
-          </div>
-          <form onSubmit={handleAsk} className="form">
-            <label>
-              Question
-              <textarea
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                rows={5}
-              />
-            </label>
-            <button type="submit" disabled={loadingAnswer}>
-              {loadingAnswer ? 'Thinking...' : 'Ask'}
-            </button>
-          </form>
-        </article>
-      </section>
-
-      <section className="card results">
-        <div className="card-header">
-          <h2>Response</h2>
-          <p>{status || 'Answers and retrieval context appear here.'}</p>
-        </div>
-        {error ? <div className="alert error">{error}</div> : null}
-        {answer ? (
-          <div className="response">
-            <p className="answer">{answer.answer}</p>
-            <div className="context-block">
-              <h3>Retrieved context</h3>
-              <pre>{answer.context}</pre>
-            </div>
-            <div className="sources-block">
-              <h3>Sources</h3>
-              <ul>
-                {answer.sources.map((source) => (
-                  <li key={source.id}>
-                    <strong>{source.title}</strong>
-                    <span>score {source.score}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        ) : (
-          <p className="placeholder">Submit a question to see the retrieval output.</p>
-        )}
-      </section>
-
-      <section className="card documents">
-        <div className="card-header">
-          <h2>Loaded documents</h2>
-          <p>These are currently available to the retrieval layer.</p>
-        </div>
-        <div className="document-list">
-          {documents.length === 0 ? (
-            <p className="placeholder">No documents loaded yet.</p>
-          ) : (
-            documents.map((document) => (
-              <article key={document.id} className="document-item">
-                <h3>{document.title}</h3>
-                <p>{document.content}</p>
-              </article>
-            ))
-          )}
-        </div>
-      </section>
-    </main>
+    <Routes>
+      <Route
+        path="/"
+        element={
+          <Layout subtitle="Quick links">
+            <HomePage health={health} />
+          </Layout>
+        }
+      />
+      <Route path="/metadata" element={<MetadataPage />} />
+      <Route path="/transcript" element={<TranscriptPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

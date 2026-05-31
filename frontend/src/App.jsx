@@ -173,11 +173,32 @@ function TranscriptPage() {
         onSubmit={({ url }) => getTranscript({ url })}
         resultRenderer={(result) => (
           <div className="response">
-            <p className="answer">{result.method} · {result.source}</p>
+            <p className="answer">
+              {result.method} · {result.source}
+            </p>
+
             <div className="context-block">
-              <h3>Transcript</h3>
+              <h3>Summary</h3>
               <pre>{result.transcript || 'No transcript returned.'}</pre>
             </div>
+
+            {Array.isArray(result.segments) && result.segments.length ? (
+              <div className="sources-block">
+                <h3>Video Segments</h3>
+                <div className="stack">
+                  {result.segments.map((segment, index) => (
+                    <article className="route-card" key={`${segment.start}-${index}`}>
+                      <strong>Segment {index + 1}</strong>
+                      <span>
+                        {segment.start.toFixed(2)}s - {(segment.start + segment.duration).toFixed(2)}s
+                      </span>
+                      <pre>{segment.text}</pre>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             {result.metadata ? (
               <div className="sources-block">
                 <h3>Metadata</h3>

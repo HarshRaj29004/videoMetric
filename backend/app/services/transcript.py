@@ -6,6 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Dict, Literal
 from urllib.parse import parse_qs, urlparse
+from deepgram import DeepgramClient
 
 from pydantic import BaseModel, Field, HttpUrl
 from dotenv import load_dotenv
@@ -14,7 +15,9 @@ import yt_dlp
 
 load_dotenv()
 
-WISPER_MODEL = os.getenv("WISPER_MODEL") or ""
+WISPER_MODEL = os.getenv("WISPER_MODEL") or "tiny"
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
+TRANSCRIPT_SEGMENT_COUNT = int(os.getenv("TRANSCRIPT_SEGMENT_COUNT") or "10")
 
 class TranscriptRequest(BaseModel):
 	url: HttpUrl
@@ -49,6 +52,46 @@ def _is_youtube_host(host: str) -> bool:
 
 def _is_instagram_host(host: str) -> bool:
 	return "instagram.com" in host
+
+
+def _group_segments_into_time_buckets(segments: list[TranscriptSegment], bucket_count: int = TRANSCRIPT_SEGMENT_COUNT) -> tuple[list[TranscriptSegment], str, dict[str, Any]]:
+	if not segments:
+		return [], "", {"truncated": False, "bucket_count": bucket_count}
+
+	total_duration = max((segment.start + segment.duration) for segment in segments)
+	if total_duration <= 0:
+		joined_text = " ".join(segment.text for segment in segments if segment.text)
+		return [TranscriptSegment(text=joined_text, start=0.0, duration=0.0)], {
+			"truncated": False,
+			"bucket_count": 1,
+		}
+	
+	bucket_duration = total_duration / bucket_count
+	buckets: list[TranscriptSegment] = []
+
+	for bucket_index in range(bucket_count):
+		bucket_start = bucket_index * bucket_duration
+		bucket_end = total_duration if bucket_index == bucket_count - 1 else (bucket_index + 1) * bucket_duration
+		bucket_segments = [
+			segment
+			for segment in segments
+			if bucket_start <= segment.start < bucket_end or (bucket_index == bucket_count - 1 and segment.start + segment.duration >= bucket_start)
+		]
+		bucket_text = " ".join(segment.text.strip() for segment in bucket_segments if segment.text.strip()).strip()
+		if not bucket_text and bucket_segments:
+			bucket_text = " ".join(segment.text.strip() for segment in bucket_segments[:3] if segment.text.strip()).strip()
+		if not bucket_text:
+			continue
+
+		buckets.append(
+			TranscriptSegment(
+				text=bucket_text,
+				start=round(bucket_start, 2),
+				duration=round(bucket_end - bucket_start, 2),
+			)
+		)
+
+	return buckets
 
 
 def _extract_youtube_video_id(url: str) -> str:
@@ -145,20 +188,36 @@ def _download_instagram_audio(temp_path: Path, url: str, cookiefile: str | None 
 
 
 def _transcribe_instagram_audio(audio_path: Path, language: str | None = None) -> tuple[list[TranscriptSegment], str]:
-	model = _load_whisper_model(WISPER_MODEL)
-	result = model.transcribe(str(audio_path), fp16=False, language=language)
+	deepgram = DeepgramClient(api_key=DEEPGRAM_API_KEY)
+	with audio_path.open("rb") as audio_file:
+		result = deepgram.listen.v1.media.transcribe_file(
+			request=audio_file.read(),
+			model="nova-3",
+			language=language or "en",
+			smart_format=True,
+		)
 
-	raw_segments = result.get("segments", [])
+	channels = getattr(result.results, "channels", []) if getattr(result, "results", None) else []
+	alternatives = channels[0].alternatives if channels else []
+	primary_alternative = alternatives[0] if alternatives else None
+	words = getattr(primary_alternative, "words", []) if primary_alternative else []
+	raw_segments = [word for word in words if (getattr(word, "word", None) if not isinstance(word, dict) else word.get("word"))]
 	segments = [
 		TranscriptSegment(
-			text=segment.get("text", "").strip(),
-			start=float(segment.get("start", 0.0)),
-			duration=float(segment.get("duration", 0.0)),
+			text=((getattr(segment, "word", None) if not isinstance(segment, dict) else segment.get("word", "")) or "").strip(),
+			start=float(getattr(segment, "start", 0.0) if not isinstance(segment, dict) else segment.get("start", 0.0)),
+			duration=float(getattr(segment, "duration", 0.0) if not isinstance(segment, dict) else segment.get("duration", 0.0)),
 		)
 		for segment in raw_segments
-		if segment.get("text")
+		if (getattr(segment, "word", None) if not isinstance(segment, dict) else segment.get("word"))
 	]
-	transcript_text = result.get("text", "").strip()
+
+	transcript_text = ""
+	if primary_alternative is not None:
+		transcript_text = getattr(primary_alternative, "transcript", "") or ""
+		if isinstance(primary_alternative, dict):
+			transcript_text = primary_alternative.get("transcript", "") or ""
+	transcript_text = transcript_text.strip()
 	if not transcript_text:
 		transcript_text = "\n".join(segment.text for segment in segments if segment.text)
 
@@ -172,6 +231,7 @@ def extract_transcript(payload: TranscriptRequest, cookiefile: str | None = None
 	if _is_youtube_host(host):
 		video_id = _extract_youtube_video_id(url)
 		segments, transcript_text = _get_youtube_transcript(video_id, payload.language)
+		segments = _group_segments_into_time_buckets(segments)
 
 		return TranscriptResponse(
 			source="youtube",
@@ -192,6 +252,7 @@ def extract_transcript(payload: TranscriptRequest, cookiefile: str | None = None
 			finally:
 				if audio_path.exists():
 					audio_path.unlink(missing_ok=True)
+			segments = _group_segments_into_time_buckets(segments)
 
 		return TranscriptResponse(
 			source="instagram",

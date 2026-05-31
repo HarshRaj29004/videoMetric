@@ -4,7 +4,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_frontend_origin
-# from .rag import InMemoryRAGStore, build_context, generate_answer, seed_store
 from .schemas import AskRequest, AskResponse, DocumentCreate, DocumentRead, RetrievedDocument
 from .api.scrape_route import router as scrape_router
 

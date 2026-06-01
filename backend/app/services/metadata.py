@@ -1,13 +1,10 @@
 from typing import Any, Dict, Optional
+from ..model.metadata_model import MetadataRequest
 
-from pydantic import BaseModel, HttpUrl
 import yt_dlp
 
 
-class ScrapeRequest(BaseModel): 
-     url: HttpUrl
-
-def extract_metadata(url: ScrapeRequest, cookiefile: Optional[str] = None) -> Dict[str, Any]:
+def extract_metadata(url: MetadataRequest, cookiefile: Optional[str] = None) -> Dict[str, Any]:
 
     ydl_opts = {
         "quiet": True,

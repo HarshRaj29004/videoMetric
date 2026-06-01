@@ -21,16 +21,22 @@ export function getHealth() {
   return request('/health');
 }
 
-export function getMediaMetadata(input) {
-  return request('/scraper', {
+export function ingestTranscript(input) {
+  return request('/ingestion/', {
     method: 'POST',
     body: JSON.stringify(input),
   });
 }
 
-export function getTranscript(input) {
-  return request('/scraper/transcript', {
+export function askSessionQuestion(input) {
+  return request('/ingestion/chat', {
     method: 'POST',
     body: JSON.stringify(input),
+  });
+}
+
+export function clearSessionVectorDb() {
+  return request('/ingestion/vector-db', {
+    method: 'DELETE',
   });
 }

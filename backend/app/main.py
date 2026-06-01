@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_frontend_origin
 from .schemas import AskRequest, AskResponse, DocumentCreate, DocumentRead, RetrievedDocument
-from .api.scrape_route import router as scrape_router
+from .api.route import router as ingestion_router
 
 app = FastAPI(title="videoMetric RAG API", version="0.1.0")
 
@@ -30,4 +30,4 @@ def health() -> dict[str, str]:
 def root() -> dict[str, str]:
     return {"message": "videoMetric RAG API is running"}
 
-app.include_router(scrape_router)
+app.include_router(ingestion_router)

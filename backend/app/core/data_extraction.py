@@ -1,12 +1,9 @@
 from pathlib import Path
 from typing import Any, Dict
-
-from fastapi import APIRouter, HTTPException
-
+from urllib.parse import urlparse
 from ..services.transcript import TranscriptRequest, extract_transcript
-from ..services.scraper import extract_metadata, ScrapeRequest
 
-router = APIRouter(prefix="/scraper", tags=["scraper"])
+from fastapi import HTTPException
 
 
 def _resolve_cookie_path(url_host: str) -> Path:
@@ -21,10 +18,8 @@ def _resolve_cookie_path(url_host: str) -> Path:
 
     return backend_root / "cookies.txt"
 
-
-@router.post("/transcript")
 def get_transcript(payload: TranscriptRequest) -> Dict[str, Any]:
-    cookies_path = _resolve_cookie_path(payload.url.host)
+    cookies_path = _resolve_cookie_path(urlparse(str(payload.url)).netloc)
 
     if not cookies_path.exists():
         raise HTTPException(
@@ -41,19 +36,3 @@ def get_transcript(payload: TranscriptRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    
-
-@router.post("/")
-def scrape_media(payload: ScrapeRequest) -> Dict[str, Any]:
-    cookies_path = _resolve_cookie_path(payload.url.host)
-
-    if not cookies_path.exists():
-        raise HTTPException(
-            status_code=500,
-            detail=f"{cookies_path.name} not found",
-        )
-
-    return extract_metadata(
-        payload,
-        cookiefile=str(cookies_path),
-    )

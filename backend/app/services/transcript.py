@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import importlib
-from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Dict, Literal
-from urllib.parse import parse_qs, urlparse
+from typing import Any
+from urllib.parse import urlparse
 from deepgram import DeepgramClient
+from .metadata import extract_metadata, MetadataRequest
+from ..model.transcript_model import TranscriptRequest,TranscriptResponse,TranscriptSegment
 
-from pydantic import BaseModel, Field, HttpUrl
+
 from dotenv import load_dotenv
 import os
 import yt_dlp
@@ -18,32 +19,6 @@ load_dotenv()
 WISPER_MODEL = os.getenv("WISPER_MODEL") or "tiny"
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 TRANSCRIPT_SEGMENT_COUNT = int(os.getenv("TRANSCRIPT_SEGMENT_COUNT") or "10")
-
-class TranscriptRequest(BaseModel):
-	url: HttpUrl
-	language: str | None = Field(default=None)
-
-
-class TranscriptSegment(BaseModel):
-	text: str
-	start: float
-	duration: float
-
-
-class TranscriptResponse(BaseModel):
-	source: Literal["youtube", "instagram"]
-	method: str
-	url: HttpUrl
-	title: str | None = None
-	video_id: str | None = None
-	language: str | None = None
-	transcript: str
-	segments: list[TranscriptSegment] = Field(default_factory=list)
-	metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-def _host(url: HttpUrl) -> str:
-	return (url.host or "").lower()
 
 
 def _is_youtube_host(host: str) -> bool:
@@ -94,29 +69,6 @@ def _group_segments_into_time_buckets(segments: list[TranscriptSegment], bucket_
 	return buckets
 
 
-def _extract_youtube_video_id(url: str) -> str:
-	parsed_url = urlparse(url)
-	hostname = parsed_url.netloc.lower()
-
-	if hostname == "youtu.be":
-		video_id = parsed_url.path.lstrip("/")
-		if video_id:
-			return video_id
-
-	query_values = parse_qs(parsed_url.query)
-	if query_values.get("v"):
-		return query_values["v"][0]
-
-	path_parts = [part for part in parsed_url.path.split("/") if part]
-	for marker in ("shorts", "embed", "live"):
-		if marker in path_parts:
-			marker_index = path_parts.index(marker)
-			if marker_index + 1 < len(path_parts):
-				return path_parts[marker_index + 1]
-
-	raise ValueError("Could not determine the YouTube video id from the URL")
-
-
 def _get_youtube_transcript(video_id: str, language: str | None = None) -> tuple[list[TranscriptSegment], str]:
 	try:
 		youtube_transcript_api = importlib.import_module("youtube_transcript_api")
@@ -150,16 +102,6 @@ def _get_youtube_transcript(video_id: str, language: str | None = None) -> tuple
 	]
 	transcript_text = "\n".join(segment.text.strip() for segment in segments if segment.text.strip())
 	return segments, transcript_text
-
-
-@lru_cache(maxsize=4)
-def _load_whisper_model(model_name: str):
-	try:
-		whisper = importlib.import_module("whisper")
-	except ModuleNotFoundError as exc:
-		raise RuntimeError("openai-whisper is required to transcribe Instagram audio") from exc
-
-	return whisper.load_model(model_name)
 
 
 def _download_instagram_audio(temp_path: Path, url: str, cookiefile: str | None = None) -> tuple[Path, dict[str, Any]]:
@@ -225,11 +167,12 @@ def _transcribe_instagram_audio(audio_path: Path, language: str | None = None) -
 
 
 def extract_transcript(payload: TranscriptRequest, cookiefile: str | None = None) -> TranscriptResponse:
-	host = _host(payload.url)
+	host = urlparse(str(payload.url)).netloc.lower()
 	url = str(payload.url)
+	metadata = extract_metadata(MetadataRequest(url=url), cookiefile)
 
 	if _is_youtube_host(host):
-		video_id = _extract_youtube_video_id(url)
+		video_id = metadata.get("id")
 		segments, transcript_text = _get_youtube_transcript(video_id, payload.language)
 		segments = _group_segments_into_time_buckets(segments)
 
@@ -241,6 +184,7 @@ def extract_transcript(payload: TranscriptRequest, cookiefile: str | None = None
 			language=payload.language,
 			transcript=transcript_text,
 			segments=segments,
+			metadata=metadata,
 		)
 
 	if _is_instagram_host(host):
@@ -261,6 +205,7 @@ def extract_transcript(payload: TranscriptRequest, cookiefile: str | None = None
 			language=payload.language,
 			transcript=transcript_text,
 			segments=segments,
+			metadata=metadata,
 		)
 
 	raise ValueError("Unsupported URL host. Only YouTube and Instagram URLs are supported.")

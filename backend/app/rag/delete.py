@@ -1,28 +1,29 @@
 import logging
+from ..core.pinecone_client import INDEX, NAMESPACE
 
 logging.basicConfig(level=logging.INFO)
 
 
-def reset_vector_db(INDEX, ids: list, metadatas: list, namespace: str = "videometric"):
+def reset_vector_db(ids: list, metadatas: list):
     if not INDEX:
         logging.warning("Pinecone index not configured; nothing to reset.")
-        return {"deleted": False, "namespace": namespace, "reason": "pinecone_not_configured"}
+        return {"deleted": False, "NAMESPACE": NAMESPACE, "reason": "pinecone_not_configured"}
 
     try:
-        INDEX.delete(delete_all=True, namespace=namespace)
+        INDEX.delete(delete_all=True, namespace=NAMESPACE)
         ids.clear()
         metadatas.clear()
-        logging.info("Cleared Pinecone namespace %s", namespace)
-        return {"deleted": True, "namespace": namespace}
+        logging.info("Cleared Pinecone namespace %s", NAMESPACE)
+        return {"deleted": True, "namespace": NAMESPACE}
     except Exception as e:
         error_name = e.__class__.__name__
         error_text = str(e)
 
-        if error_name == "NotFoundError" or "Namespace not found" in error_text or "[404]" in error_text:
+        if error_name == "NotFoundError" or "NAMESPACE not found" in error_text or "[404]" in error_text:
             ids.clear()
             metadatas.clear()
-            logging.warning("Pinecone namespace %s was already absent", namespace)
-            return {"deleted": True, "namespace": namespace, "already_empty": True}
+            logging.warning("Pinecone namespace %s was already absent", NAMESPACE)
+            return {"deleted": True, "namespace": NAMESPACE, "already_empty": True}
 
-        logging.exception("Failed to clear Pinecone namespace %s: %s", namespace, e)
-        return {"deleted": False, "namespace": namespace, "error": str(e)}
+        logging.exception("Failed to clear Pinecone namespace %s: %s", NAMESPACE, e)
+        return {"deleted": False, "namespace": NAMESPACE, "error": str(e)}

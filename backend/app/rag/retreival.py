@@ -1,71 +1,79 @@
-from typing import Any, Callable, Dict, List, Optional
-from pinecone import Pinecone
-from dotenv import load_dotenv
-import os
+from typing import Any, Dict, List
 import logging
+from ..core.pinecone_client import INDEX, NAMESPACE
 
-load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 
-# def _query_index_with_text(query: str, top_k: int) -> Any:
-#     search_payload = {
-#         "inputs": {"text": query},
-#         "top_k": top_k,
-#     }
+def _query_index_with_text(query: str, top_k: int, video_id: str) -> Any:
+    search_payload = {
+        "inputs": {"text": query},
+        "top_k": top_k,
+    }
+    # include a video_id filter only when provided
+    if video_id:
+        search_payload["filter"] = {"video_id": video_id}
 
-#     if hasattr(INDEX, "search_records"):
-#         try:
-#             return INDEX.search_records(namespace="videometric", query=search_payload)
-#         except TypeError:
-#             pass
+    if hasattr(INDEX, "search_records"):
+        try:
+            return INDEX.search_records(namespace=NAMESPACE, query=search_payload)
+        except TypeError:
+            pass
 
-#     if hasattr(INDEX, "search"):
-#         try:
-#             return INDEX.search(namespace="videometric", query=search_payload)
-#         except TypeError:
-#             pass
+    if hasattr(INDEX, "query_records"):
+        try:
+            return INDEX.query_records(namespace=NAMESPACE, query=search_payload)
+        except TypeError:
+            pass
 
-#     raise RuntimeError("Pinecone index does not expose a text-search method")
+    if hasattr(INDEX, "search"):
+        try:
+            return INDEX.search(namespace=NAMESPACE, query=search_payload)
+        except TypeError:
+            pass
+
+    if hasattr(INDEX, "query"):
+        try:
+            return INDEX.query(namespace=NAMESPACE, **search_payload)
+        except TypeError:
+            pass
+
+    raise RuntimeError(
+        "Index does not expose a text-search method; expected one of search_records, query_records, search, or query"
+    )
 
 
-def search_chunks(INDEX,metadatquery: str, top_k: int = 3, embed_fn: Optional[Callable[[str], List[float]]] = None) -> List[Dict[str, Any]]:
+def search_chunks(query: str, video_id: str, top_k: int = 3) -> List[Dict[str, Any]]:
     if INDEX is None:
         logging.warning("Pinecone index not configured; search skipped.")
         return []
 
     try:
-        if embed_fn is not None:
-            q_vector = embed_fn(query)
-            response = INDEX.query(queries=[q_vector], top_k=top_k, include_metadata=True, include_values=False)
-        else:
-            response = _query_index_with_text(query, top_k)
+        response = _query_index_with_text(query, top_k, video_id)
     except Exception as e:
         logging.exception("Pinecone query failed: %s", e)
         return []
 
     matches: List[Dict[str, Any]] = []
+    matches_list: List[Dict[str, Any]] = []
 
-    # support multiple Pinecone response shapes
-    results = response.get("results") or response.get("matches") or []
-    matches_list = []
-    if isinstance(results, list) and results:
-        # newer shape: results -> [{matches: [...]}]
-        for r in results[0].get("matches", []):
-            matches_list.append(r)
+    if isinstance(response, list):
+        for item in response:
+            if isinstance(item, dict):
+                matches_list.extend(item.get("matches", []))
+    elif isinstance(response, dict):
+        matches_list = response.get("matches", []) or response.get("results", [])
     else:
-        matches_list = response.get("matches", [])
+        matches_list = getattr(response, "matches", []) or getattr(response, "results", [])
 
     for match in matches_list:
         metadata = match.get("metadata") or {}
-        content = metadata.get("text") or metadata.get("content") or match.get("payload") or ""
+        content = metadata.get("text") or metadata.get("content") or match.get("payload") or match.get("text") or ""
         matches.append(
             {
                 "id": match.get("id"),
                 "content": content,
-                "metadata": metadata,
-                "score": match.get("score") or match.get("distance"),
-                "video_id": metadata.get("video_id"),
+                "metadata": match.get("metadata"),
             }
         )
 

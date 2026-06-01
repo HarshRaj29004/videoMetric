@@ -47,6 +47,7 @@ function App() {
   const [messages, setMessages] = useState([INITIAL_ASSISTANT_MESSAGE]);
   const [question, setQuestion] = useState('');
   const [ingestedVideos, setIngestedVideos] = useState([]);
+  const [selectedVideoId, setSelectedVideoId] = useState(null);
   const [sessionReady, setSessionReady] = useState(false);
   const [sessionStatus, setSessionStatus] = useState('idle');
   const [statusMessage, setStatusMessage] = useState('No session is active.');
@@ -100,10 +101,15 @@ function App() {
       setStatusMessage('Ingesting the second video...');
       const secondResult = await ingestTranscript({ url: trimmedSecond });
 
+      const firstVidId = firstResult?.video_id ?? null;
+      const secondVidId = secondResult?.video_id ?? null;
+
       setIngestedVideos([
-        { url: trimmedFirst, result: firstResult },
-        { url: trimmedSecond, result: secondResult },
+        { url: trimmedFirst, video_id: firstVidId, result: firstResult },
+        { url: trimmedSecond, video_id: secondVidId, result: secondResult },
       ]);
+      // default selection: first ingested video id if present
+      setSelectedVideoId(firstVidId || secondVidId);
       setSessionReady(true);
       setSessionStatus('ready');
       setStatusMessage('Two videos are stored in the vector database. Chat is now enabled.');
@@ -144,7 +150,10 @@ function App() {
         { role: 'user', text: trimmedQuestion },
       ]);
 
-      const response = await askSessionQuestion({ question: trimmedQuestion, top_k: 3 });
+      const payload = { question: trimmedQuestion, top_k: 3 };
+      if (selectedVideoId) payload.video_id = selectedVideoId;
+
+      const response = await askSessionQuestion(payload);
 
       setMessages((currentMessages) => [
         ...currentMessages,
@@ -283,6 +292,17 @@ function App() {
                 placeholder="What are the main points covered across both videos?"
                 disabled={!sessionReady}
               />
+            </label>
+            <label>
+              Select video (optional)
+              <select value={selectedVideoId ?? ''} onChange={(e) => setSelectedVideoId(e.target.value || null)} disabled={!sessionReady}>
+                <option value="">All videos</option>
+                {ingestedVideos.map((v, i) => (
+                  <option key={`${v.video_id}-${i}`} value={v.video_id || ''}>
+                    {v.video_id ? `${v.video_id} — ${v.url}` : `Video ${i + 1} — ${v.url}`}
+                  </option>
+                ))}
+              </select>
             </label>
             <div className="button-row">
               <button type="submit" disabled={!sessionReady || sendingChat}>

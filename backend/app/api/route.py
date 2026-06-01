@@ -3,7 +3,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, HTTPException
 
 from ..core.data_extraction import get_transcript
-from ..schemas import AskRequest, AskResponse, RetrievedDocument
+from ..model.schemas import AskRequest, AskResponse, RetrievedDocument
 from ..services.transcript import TranscriptRequest
 from ..core.chat import data_delete,data_ingestion,data_retreival
 
@@ -23,15 +23,16 @@ def ingestion(payload: TranscriptRequest) -> Dict[str, Any]:
     return {
         "status": "ok",
         "source": transcript.get("source"),
-        "video_id": storage_result.get("video_id",None),
+        # prefer storage_result video_id, fall back to transcript metadata
+        "video_id": storage_result.get("video_id") or transcript.get("video_id"),
         "chunks_stored": storage_result.get("chunks_stored", 0),
         "metadata_stored": storage_result.get("metadata_stored", False),
     }
 
 @router.post('/data-retreive', response_model=AskResponse)
-def chat(payload: AskRequest) -> AskResponse:
+def retreive(payload: AskRequest) -> AskResponse:
     try:
-        matches = data_retreival(payload.question, top_k=payload.top_k)
+        matches,metadata = data_retreival(payload.question, top_k=payload.top_k,video_id = payload.video_id)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -47,20 +48,16 @@ def chat(payload: AskRequest) -> AskResponse:
     context_parts = []
     for index, match in enumerate(matches, start=1):
         content = str(match.get('content', '')).strip()
-        metadata = match.get('metadata') or {}
         context_parts.append(f'[{index}] {content}')
         sources.append(
             RetrievedDocument(
                 id=str(match.get('id') or f'chunk-{index}'),
-                title=f"{metadata.get('source', 'video')} · {metadata.get('video_id', 'unknown')}",
+                title=f"{metadata.get('source', 'video')} · {payload.video_id}",
                 content=content,
                 score=max(1, len(matches) - index + 1),
                 metadata={
                     'video_id': metadata.get('video_id'),
                     'source': metadata.get('source'),
-                    'start': metadata.get('start'),
-                    'end': metadata.get('end'),
-                    'distance': match.get('distance'),
                 },
             )
         )
@@ -74,7 +71,7 @@ def chat(payload: AskRequest) -> AskResponse:
 
 
 @router.delete('/data-delete')
-def clear_vector_db() -> Dict[str, Any]:
+def delete() -> Dict[str, Any]:
     try:
         result = data_delete()
     except Exception as exc:

@@ -22,21 +22,21 @@ export function getHealth() {
 }
 
 export function ingestTranscript(input) {
-  return request('/ingestion/', {
+  return request('/ingestion/data-ingest', {
     method: 'POST',
     body: JSON.stringify(input),
   });
 }
 
 export function askSessionQuestion(input) {
-  return request('/ingestion/chat', {
+  return request('/ingestion/data-retreive', {
     method: 'POST',
     body: JSON.stringify(input),
   });
 }
 
 export function clearSessionVectorDb() {
-  return request('/ingestion/vector-db', {
+  return request('/ingestion/data-delete', {
     method: 'DELETE',
   });
 }

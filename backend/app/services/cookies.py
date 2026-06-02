@@ -11,6 +11,6 @@ def initialize_cookies():
         os.chmod("/tmp/youtube_cookies.txt", 0o600)
             
     if insta_b64:
-        with open("insta_cookies.txt", "wb") as f:
+        with open("instagram_cookies.txt", "wb") as f:
             f.write(base64.b64decode(insta_b64))
         os.chmod("/tmp/instagram_cookies.txt",0o600)

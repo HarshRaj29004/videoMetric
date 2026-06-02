@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from typing import Any
-
 from pydantic import BaseModel, Field
-
+from .chat_model import VideoContext
 
 class DocumentCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
@@ -37,3 +36,18 @@ class AskResponse(BaseModel):
     answer: str
     context: str
     sources: list[RetrievedDocument]
+
+
+class ChatRequest(BaseModel):
+    query: str
+    userContent: list[VideoContext]
+    user_id: str
+    chat_id: str
+
+
+class ChatResponse(BaseModel):
+    query: str
+    video_ids: list[str]
+    user_id: str
+    chat_id: str
+    answer: str

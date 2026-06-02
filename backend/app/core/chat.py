@@ -14,11 +14,14 @@ def data_ingestion(transcript):
 def data_retreival(query, top_k, video_id):
     # perform the search
     matches = search_chunks(query, video_id, top_k)
-    metadata = {}
-    if video_id:
-        metadata = metadatas[video_id]
+    # metadata = metadata_fetch(video_id)
 
-    return matches, metadata
+    return matches
 
 def data_delete():
     return reset_vector_db(ids, metadatas)
+
+def metadata_fetch(video_id):
+    if video_id:
+        return metadatas[video_id]
+    return {}

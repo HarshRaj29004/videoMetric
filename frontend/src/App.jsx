@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
-import { askSessionQuestion, clearSessionVectorDb, getHealth, ingestTranscript } from './api';
-
-const DEFAULT_URL_ONE = 'https://www.youtube.com/watch?v=XuIswf2NauQ';
-const DEFAULT_URL_TWO = 'https://www.youtube.com/watch?v=jNQXAC9IVRw';
+import { askGraphChat, clearSessionVectorDb, getHealth, ingestTranscript } from './api';
 
 const INITIAL_ASSISTANT_MESSAGE = {
   role: 'assistant',
   text: 'Provide two video URLs, start the session, and then ask questions about the stored transcripts.',
 };
+
+const STORAGE_KEY = 'Local_storage_key';
 
 function formatError(error) {
   return error instanceof Error ? error.message : 'Request failed';
@@ -39,18 +38,49 @@ function ChatMessage({ message }) {
 }
 
 function App() {
+  const [userId] = useState(() => {
+    const USER_ID_KEY = 'videometric_user_id';
+    const existing = window.localStorage.getItem(USER_ID_KEY);
+    if (existing) return existing;
+    const created = window.crypto.randomUUID();
+    window.localStorage.setItem(USER_ID_KEY, created);
+    return created;
+  });
+  const [chatId] = useState(() => window.crypto.randomUUID());
   const [health, setHealth] = useState(null);
   const [videoUrls, setVideoUrls] = useState({
-    first: DEFAULT_URL_ONE,
-    second: DEFAULT_URL_TWO,
+    first: '',
+    second: '',
   });
-  const [messages, setMessages] = useState([INITIAL_ASSISTANT_MESSAGE]);
+  const [ingestedVideos, setIngestedVideos] = useState(() => {
+    const cached = window.localStorage.getItem(STORAGE_KEY);
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [sessionReady, setSessionReady] = useState(() => {
+    return window.localStorage.getItem(STORAGE_KEY) !== null;
+  });
+  const [sessionStatus, setSessionStatus] = useState(() => {
+    return window.localStorage.getItem(STORAGE_KEY) ? 'ready' : 'idle';
+  });
+  const [statusMessage, setStatusMessage] = useState(() => {
+    return window.localStorage.getItem(STORAGE_KEY) 
+      ? 'Restored session from cache. Two videos are stored in the vector database. Chat is enabled.' 
+      : 'No session is active.';
+  });
+  const [messages, setMessages] = useState(() => {
+    const cached = window.localStorage.getItem(STORAGE_KEY);
+    return cached 
+      ? [
+          INITIAL_ASSISTANT_MESSAGE,
+          {
+            role: 'assistant',
+            text: 'Active session restored. Ask about either transcript and I will ground the response in the stored chunks.',
+          }
+        ]
+      : [INITIAL_ASSISTANT_MESSAGE];
+  });
+
   const [question, setQuestion] = useState('');
-  const [ingestedVideos, setIngestedVideos] = useState([]);
-  const [selectedVideoId, setSelectedVideoId] = useState(null);
-  const [sessionReady, setSessionReady] = useState(false);
-  const [sessionStatus, setSessionStatus] = useState('idle');
-  const [statusMessage, setStatusMessage] = useState('No session is active.');
   const [loadingSession, setLoadingSession] = useState(false);
   const [sendingChat, setSendingChat] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
@@ -104,12 +134,16 @@ function App() {
       const firstVidId = firstResult?.video_id ?? null;
       const secondVidId = secondResult?.video_id ?? null;
 
-      setIngestedVideos([
+      const updatedVideos = [
         { url: trimmedFirst, video_id: firstVidId, result: firstResult },
         { url: trimmedSecond, video_id: secondVidId, result: secondResult },
-      ]);
-      // default selection: first ingested video id if present
-      setSelectedVideoId(firstVidId || secondVidId);
+      ];
+
+      // Cache the entire result object containing source, video_id, and title to localStorage
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedVideos));
+
+      setIngestedVideos(updatedVideos);
+      // setSelectedVideoId(firstVidId || secondVidId);
       setSessionReady(true);
       setSessionStatus('ready');
       setStatusMessage('Two videos are stored in the vector database. Chat is now enabled.');
@@ -150,18 +184,24 @@ function App() {
         { role: 'user', text: trimmedQuestion },
       ]);
 
-      const payload = { question: trimmedQuestion, top_k: 3 };
-      if (selectedVideoId) payload.video_id = selectedVideoId;
+      const userContent = ingestedVideos
 
-      const response = await askSessionQuestion(payload);
+      if (userContent.length < 2) {
+        throw new Error('Both ingested video IDs were not found. Re-ingest the videos and try again.');
+      }
+
+      const response = await askGraphChat({
+        query: trimmedQuestion,
+        userContent: userContent,
+        user_id: userId,
+        chat_id: chatId,
+      });
 
       setMessages((currentMessages) => [
         ...currentMessages,
         {
           role: 'assistant',
           text: response.answer || 'No answer returned.',
-          context: response.context,
-          sources: response.sources,
         },
       ]);
       setQuestion('');
@@ -178,6 +218,7 @@ function App() {
 
     try {
       await clearSessionVectorDb();
+      window.localStorage.removeItem(STORAGE_KEY);
     } catch (submissionError) {
       setError(formatError(submissionError));
       return;
@@ -222,11 +263,11 @@ function App() {
 
       {error ? <div className="alert error">{error}</div> : null}
 
-      <section className="grid session-grid">
-        <article className="card">
+      <section className="layout-shell">
+        <aside className="card sidebar-card">
           <div className="card-header">
-            <h2>Session setup</h2>
-            <p>Enter two URLs, then start the session to ingest both transcripts.</p>
+            <h2>Video setup</h2>
+            <p>Add two URLs to unlock chat.</p>
           </div>
 
           <form className="form" onSubmit={startSession}>
@@ -235,7 +276,7 @@ function App() {
               <input
                 value={videoUrls.first}
                 onChange={(event) => setVideoUrls((current) => ({ ...current, first: event.target.value }))}
-                placeholder={DEFAULT_URL_ONE}
+                placeholder="https://www.youtube.com/watch?v=..."
               />
             </label>
             <label>
@@ -243,11 +284,11 @@ function App() {
               <input
                 value={videoUrls.second}
                 onChange={(event) => setVideoUrls((current) => ({ ...current, second: event.target.value }))}
-                placeholder={DEFAULT_URL_TWO}
+                placeholder="https://www.youtube.com/watch?v=..."
               />
             </label>
             <button type="submit" disabled={loadingSession}>
-              {loadingSession ? 'Starting session...' : 'Store transcripts and enable chat'}
+              {loadingSession ? 'Starting session...' : 'Ingest 2 videos'}
             </button>
           </form>
 
@@ -270,9 +311,9 @@ function App() {
               </div>
             </div>
           ) : null}
-        </article>
+        </aside>
 
-        <article className="card chat-panel">
+        <article className="card chat-panel main-chat-panel">
           <div className="card-header">
             <h2>Chat</h2>
             <p>{sessionReady ? 'Ask questions about the loaded videos.' : 'Chat becomes available after both videos are stored.'}</p>
@@ -293,7 +334,7 @@ function App() {
                 disabled={!sessionReady}
               />
             </label>
-            <label>
+            {/* <label>
               Select video (optional)
               <select value={selectedVideoId ?? ''} onChange={(e) => setSelectedVideoId(e.target.value || null)} disabled={!sessionReady}>
                 <option value="">All videos</option>
@@ -303,7 +344,7 @@ function App() {
                   </option>
                 ))}
               </select>
-            </label>
+            </label> */}
             <div className="button-row">
               <button type="submit" disabled={!sessionReady || sendingChat}>
                 {sendingChat ? 'Sending...' : 'Send question'}

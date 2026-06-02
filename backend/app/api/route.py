@@ -1,11 +1,13 @@
 from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from ..core.data_extraction import get_transcript
-from ..model.schemas import AskRequest, AskResponse, RetrievedDocument
+from ..model.schemas import AskRequest, AskResponse, RetrievedDocument, ChatRequest, ChatResponse
 from ..services.transcript import TranscriptRequest
-from ..core.chat import data_delete,data_ingestion,data_retreival
+from ..core.chat import data_delete,data_ingestion,data_retreival,metadata_fetch
+from ..core.graph import run_chat_stream
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
@@ -23,8 +25,8 @@ def ingestion(payload: TranscriptRequest) -> Dict[str, Any]:
     return {
         "status": "ok",
         "source": transcript.get("source"),
-        # prefer storage_result video_id, fall back to transcript metadata
         "video_id": storage_result.get("video_id") or transcript.get("video_id"),
+        "title": storage_result.get("title",""),
         "chunks_stored": storage_result.get("chunks_stored", 0),
         "metadata_stored": storage_result.get("metadata_stored", False),
     }
@@ -32,7 +34,8 @@ def ingestion(payload: TranscriptRequest) -> Dict[str, Any]:
 @router.post('/data-retreive', response_model=AskResponse)
 def retreive(payload: AskRequest) -> AskResponse:
     try:
-        matches,metadata = data_retreival(payload.question, top_k=payload.top_k,video_id = payload.video_id)
+        matches = data_retreival(payload.question, top_k=payload.top_k,video_id = payload.video_id)
+        metadata = metadata_fetch(payload.video_id)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -66,7 +69,7 @@ def retreive(payload: AskRequest) -> AskResponse:
         question=payload.question,
         answer=f'Retrieved {len(matches)} relevant transcript chunk(s) from the current session.',
         context='\n\n'.join(context_parts),
-        sources=sources,
+        # sources=sources,
     )
 
 
@@ -85,3 +88,25 @@ def delete() -> Dict[str, Any]:
 
     detail = result.get("error") or result.get("reason") or "Failed to clear vector database"
     raise HTTPException(status_code=500, detail=detail)
+
+@router.post('/')
+async def chat(payload: ChatRequest):
+    """
+    Handles real-time streaming chat turns by consuming the LangGraph 
+    async generator and piping text tokens directly to the client.
+    """
+    try:
+        token_generator = run_chat_stream(
+            query=payload.query,
+            user_content=payload.userContent,
+            user_id=payload.user_id,
+            chat_id=payload.chat_id,
+        )
+        
+        return StreamingResponse(
+            token_generator, 
+            media_type="text/event-stream"
+        )
+        
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc

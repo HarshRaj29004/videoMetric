@@ -73,13 +73,11 @@ def search_chunks(query: str, video_id: str, top_k: int = 3) -> List[Dict[str, A
     # print(matches_list)
     for match_obj in matches_list:
         match = match_obj.fields or {}
-        metadata = match.get("metadata") or {}
-        content = metadata.get("text") or metadata.get("content") or match.get("payload") or match.get("text") or ""
+        content = match.get("payload") or match.get("text") or ""
         matches.append(
             {
                 "id": match.get("_id"),
                 "content": content,
-                "metadata": match.get("metadata"),
             }
         )
 

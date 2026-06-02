@@ -27,9 +27,8 @@ def _safe_num(value, default=0):
         return default
 
 
-def _chunk_and_store_transcript(INDEX,NAMESPACE,metadatas: list, ids: list, video_id: str, source: str, metadata: Dict, transcript: str, chunk_size: Optional[int] = None, overlap: Optional[int] = None):
+def _chunk_and_store_transcript(INDEX,NAMESPACE,metadatas, ids: list, video_id: str, source: str, metadata: Dict, transcript: str, chunk_size: Optional[int] = None, overlap: Optional[int] = None):
     transcript = transcript or ""
-    # If no transcript was extracted, fall back to metadata (description/title)
     if not transcript.strip():
         fallback = (metadata.get("description") or "")
         if not fallback.strip():
@@ -84,7 +83,7 @@ def _chunk_and_store_transcript(INDEX,NAMESPACE,metadatas: list, ids: list, vide
     }
 
     safe_metadata = _sanitize_metadata(raw_metadata)
-    metadatas.append(safe_metadata)
+    metadatas[video_id] = safe_metadata
 
     local_ids = []
     for idx, chunk_text in enumerate(document_chunks):

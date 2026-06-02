@@ -4,10 +4,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .model.schemas import AskRequest, AskResponse, DocumentCreate, DocumentRead, RetrievedDocument
 from .api.route import router as ingestion_router
+from .services.cookies import initialize_cookies
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
+initialize_cookies()
 
 app = FastAPI(title="videoMetric RAG API", version="0.1.0")
 FRONTEND = os.getenv("FRONTEND_ORIGIN")

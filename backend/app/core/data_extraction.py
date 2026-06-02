@@ -2,21 +2,32 @@ from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlparse
 from ..services.transcript import TranscriptRequest, extract_transcript
-
+import tempfile
 from fastapi import HTTPException
 
 
+# def _resolve_cookie_path(url_host: str) -> Path:
+#     backend_root = Path(__file__).resolve().parents[2]
+#     host = url_host.lower()
+
+#     if "instagram.com" in host:
+#         return backend_root / "instagram_cookies.txt"
+
+#     if host.endswith("youtube.com") or host == "youtu.be":
+#         return backend_root / "youtube_cookies.txt"
+
+#     return backend_root / "cookies.txt"
 def _resolve_cookie_path(url_host: str) -> Path:
-    backend_root = Path(__file__).resolve().parents[2]
+    temp_dir = Path(tempfile.gettempdir())
     host = url_host.lower()
 
     if "instagram.com" in host:
-        return backend_root / "instagram_cookies.txt"
+        return temp_dir / "instagram_cookies.txt"
 
     if host.endswith("youtube.com") or host == "youtu.be":
-        return backend_root / "youtube_cookies.txt"
+        return temp_dir / "youtube_cookies.txt"
 
-    return backend_root / "cookies.txt"
+    return temp_dir / "cookies.txt"
 
 def get_transcript(payload: TranscriptRequest) -> Dict[str, Any]:
     cookies_path = _resolve_cookie_path(urlparse(str(payload.url)).netloc)

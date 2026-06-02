@@ -94,10 +94,9 @@ def _chunk_and_store_transcript(INDEX,NAMESPACE,metadatas: list, ids: list, vide
             "video_id": str(video_id),
             "text": chunk_text,
         }
-        record.update(safe_metadata)
+        # record.update(safe_metadata)
         records.append(record)
         local_ids.append(rec_id)
-    # extend the session ids with the newly created local ids
     ids.extend(local_ids)
     
 

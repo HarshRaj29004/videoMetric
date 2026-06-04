@@ -15,22 +15,22 @@ An advanced, production-ready Dual-Video RAG (Retrieval-Augmented Generation) Ch
 
 ```mermaid
 graph TD
-    Client[React Frontend] -->|1. Ingest URLs| Ingestion[FastAPI: /ingestion/data-ingest]
-    Client -->|2. Clear Session| Deletion[FastAPI: /ingestion/data-delete]
-    Client -->|3. SSE Chat Stream| Chat[FastAPI: /ingestion/]
+    Client["React Frontend"] -->|1. Ingest URLs| Ingestion["FastAPI: /ingestion/data-ingest"]
+    Client -->|2. Clear Session| Deletion["FastAPI: /ingestion/data-delete"]
+    Client -->|3. SSE Chat Stream| Chat["FastAPI: /ingestion/"]
 
-    Ingestion -->|Extract Meta & Chunks| YTDLP[yt-dlp Engine]
-    Ingestion -->|Retrieve YouTube Captions| YTAPI[youtube-transcript-api]
-    Ingestion -->|Transcribe Instagram Audio| Deepgram[Deepgram Nova-3 API]
-    Ingestion -->|Store Chunk Embeddings| Pinecone[Pinecone Vector Database]
+    Ingestion -->|Extract Meta & Chunks| YTDLP["yt-dlp Engine"]
+    Ingestion -->|Retrieve YouTube Captions| YTAPI["youtube-transcript-api"]
+    Ingestion -->|Transcribe Instagram Audio| Deepgram["Deepgram Nova-3 API"]
+    Ingestion -->|Store Chunk Embeddings| Pinecone["Pinecone Vector Database"]
 
-    Chat -->|Evaluate State| LangGraph[LangGraph Engine]
-    LangGraph -->|Node 1: Researcher| Researcher[Researcher Agent]
-    Researcher -->|Call Tool| SearchTool[search_transcript]
-    Researcher -->|Call Tool| MetaTool[get_video_metadata]
+    Chat -->|Evaluate State| LangGraph["LangGraph Engine"]
+    LangGraph -->|Node 1: Researcher| Researcher["Researcher Agent"]
+    Researcher -->|Call Tool| SearchTool["search_transcript"]
+    Researcher -->|Call Tool| MetaTool["get_video_metadata"]
     SearchTool --> Pinecone
-    MetaTool --> LocalCache[In-Memory Cache & Recovery]
-    LangGraph -->|Node 2: Copywriter| Copywriter[Copywriter Strategist]
+    MetaTool --> LocalCache["In-Memory Cache & Recovery"]
+    LangGraph -->|Node 2: Copywriter| Copywriter["Copywriter Strategist"]
     Copywriter -->|Yield SSE Events & Tokens| Client
 ```
 

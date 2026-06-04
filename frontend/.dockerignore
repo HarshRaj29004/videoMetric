@@ -26,4 +26,3 @@ Thumbs.db
 # Docker build configs
 Dockerfile
 .dockerignore
-nginx.conf

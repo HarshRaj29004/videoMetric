@@ -2,8 +2,10 @@ fastapi==0.115.0
 uvicorn==0.30.6
 python-multipart==0.0.29
 python-dotenv==1.0.1
+# AI & Agentic Framework (LangGraph & LangChain)
 langchain-core==1.4.0
 langchain-groq==1.1.2
+langchain-text-splitters==1.1.2
 langgraph==1.2.2
 langgraph-prebuilt==1.1.0
 pinecone==9.0.1

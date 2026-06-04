@@ -469,11 +469,8 @@ function App() {
         {/* Chat Area Header */}
         <header className="chat-header">
           <div className="chat-header-title">
-            <h2>Dual Video RAG Chat Assistant</h2>
+            <h2>Chat Assistant</h2>
             <div className={`chat-header-status-indicator ${sessionReady ? 'ready' : ''}`} />
-          </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            Gemini 3.5 Flash powered
           </div>
         </header>
 

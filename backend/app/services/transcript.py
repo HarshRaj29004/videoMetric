@@ -69,14 +69,28 @@ def _group_segments_into_time_buckets(segments: list[TranscriptSegment], bucket_
 	return buckets
 
 
-def _get_youtube_transcript(video_id: str, language: str | None = None) -> tuple[list[TranscriptSegment], str]:
+def _get_youtube_transcript(video_id: str, language: str | None = None, cookiefile: str | None = None) -> tuple[list[TranscriptSegment], str]:
 	try:
 		youtube_transcript_api = importlib.import_module("youtube_transcript_api")
 	except ModuleNotFoundError as exc:
 		raise RuntimeError("youtube-transcript-api is required to extract YouTube transcripts") from exc
 
 	YouTubeTranscriptApi = youtube_transcript_api.YouTubeTranscriptApi
-	api = YouTubeTranscriptApi()
+
+	http_client = None
+	if cookiefile:
+		import requests
+		import http.cookiejar
+		session = requests.Session()
+		try:
+			cj = http.cookiejar.MozillaCookieJar(cookiefile)
+			cj.load(ignore_discard=True, ignore_expires=True)
+			session.cookies = cj
+			http_client = session
+		except Exception as e:
+			print(f"Failed to load cookies into youtube-transcript-api: {str(e)}")
+
+	api = YouTubeTranscriptApi(http_client=http_client)
 	transcript_list = api.list(video_id)
 	preferred_languages = [language] if language else ["en"]
 
@@ -173,7 +187,7 @@ def extract_transcript(payload: TranscriptRequest, cookiefile: str | None = None
 
 	if _is_youtube_host(host):
 		video_id = metadata.get("id")
-		segments, transcript_text = _get_youtube_transcript(video_id, payload.language)
+		segments, transcript_text = _get_youtube_transcript(video_id, payload.language, cookiefile)
 		segments = _group_segments_into_time_buckets(segments)
 
 		return TranscriptResponse(

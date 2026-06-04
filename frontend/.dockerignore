@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+npm-debug.log
+
+# Build output
+dist/
+build/
+
+# Local configuration
+.env
+.env.*
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS cache files
+.DS_Store
+Thumbs.db
+
+# Docker build configs
+Dockerfile
+.dockerignore
+nginx.conf

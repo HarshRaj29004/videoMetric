@@ -1,0 +1,28 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local environments
+.venv/
+venv/
+env/
+ENV/
+
+# Configuration and secrets
+.env
+.env.*
+*.txt
+!requirements.txt
+
+# Version control and IDEs
+.git/
+.gitignore
+.github/
+.idea/
+.vscode/
+
+# Docker build configs
+Dockerfile
+.dockerignore

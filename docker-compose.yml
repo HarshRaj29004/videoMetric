@@ -1,0 +1,48 @@
+version: '3.8'
+
+networks:
+  videometric-network:
+    driver: bridge
+
+services:
+  # ==========================================
+  # Backend API & RAG Agent Service
+  # ==========================================
+  backend:
+    container_name: videometric-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - videometric-network
+    env_file:
+      - ./backend/.env
+    # We do not expose port 8000 to the public host in production;
+    # it is kept internal to the bridged network for security.
+    # Frontend Nginx acts as the single entry point.
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ==========================================
+  # Frontend static & Reverse-Proxy Gateway
+  # ==========================================
+  frontend:
+    container_name: videometric-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - videometric-network
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy

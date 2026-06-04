@@ -35,7 +35,7 @@ export function askSessionQuestion(input) {
   });
 }
 
-export function askGraphChat(input) {
+export function askGraphChat(input, onEvent) {
   // The backend exposes a streaming chat at POST /ingestion (SSE/text stream).
   // Perform a fetch and stream tokens, assembling them into a single answer string.
   return (async () => {
@@ -61,6 +61,22 @@ export function askGraphChat(input) {
     let buffer = '';
     let answer = '';
 
+    const handleData = (dataStr) => {
+      if (dataStr === '[DONE]') return;
+      try {
+        const parsed = JSON.parse(dataStr);
+        if (onEvent) {
+          onEvent(parsed);
+        }
+        if (parsed.type === 'token') {
+          answer += parsed.content;
+        }
+      } catch (err) {
+        // Fallback for raw text token
+        answer += dataStr;
+      }
+    };
+
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
@@ -75,13 +91,7 @@ export function askGraphChat(input) {
           const trimmed = line.trim();
           if (!trimmed) continue;
           if (trimmed.startsWith('data:')) {
-            const data = trimmed.slice(5).trim();
-            if (data === '[DONE]') continue;
-            // append data to answer
-            answer += data;
-          } else {
-            // fallback: append raw line
-            answer += trimmed;
+            handleData(trimmed.slice(5).trim());
           }
         }
       }
@@ -93,10 +103,7 @@ export function askGraphChat(input) {
         const trimmed = line.trim();
         if (!trimmed) continue;
         if (trimmed.startsWith('data:')) {
-          const data = trimmed.slice(5).trim();
-          if (data !== '[DONE]') answer += data;
-        } else {
-          answer += trimmed;
+          handleData(trimmed.slice(5).trim());
         }
       }
     }
